@@ -6,6 +6,7 @@ import logging
 import logging.config
 import yaml
 from kafka import KafkaConsumer
+import threading
 
 # Load configuration
 with open('/config/analyzer_config.yml', 'r') as f:
@@ -43,6 +44,9 @@ def create_consumer():
 # Create the persistent consumer at module load time
 kafka_consumer = create_consumer()
 
+# Create a lock to prevent concurrent access to the consumer
+consumer_lock = threading.Lock()
+
 
 def get_performance_event(index):
     """Gets a performance event at a specific index"""
@@ -53,20 +57,22 @@ def get_performance_event(index):
         return {"message": "Service unavailable"}, 503
     
     try:
-        # Seek to beginning and iterate
-        kafka_consumer.seek_to_beginning()
-        performance_count = 0
-        
-        # Iterate through messages
-        for msg in kafka_consumer:
-            data = msg.value
+        # Use lock to prevent concurrent access
+        with consumer_lock:
+            # Seek to beginning and iterate
+            kafka_consumer.seek_to_beginning()
+            performance_count = 0
             
-            # Check if this is a performance event
-            if data.get('type') == 'performance_metric':
-                if performance_count == index:
-                    logger.info(f"Found performance event at index {index}")
-                    return data['payload'], 200
-                performance_count += 1
+            # Iterate through messages
+            for msg in kafka_consumer:
+                data = msg.value
+                
+                # Check if this is a performance event
+                if data.get('type') == 'performance_metric':
+                    if performance_count == index:
+                        logger.info(f"Found performance event at index {index}")
+                        return data['payload'], 200
+                    performance_count += 1
         
         # If we get here, index not found
         logger.error(f"No performance event found at index {index}")
@@ -86,20 +92,22 @@ def get_error_event(index):
         return {"message": "Service unavailable"}, 503
     
     try:
-        # Seek to beginning and iterate
-        kafka_consumer.seek_to_beginning()
-        error_count = 0
-        
-        # Iterate through messages
-        for msg in kafka_consumer:
-            data = msg.value
+        # Use lock to prevent concurrent access
+        with consumer_lock:
+            # Seek to beginning and iterate
+            kafka_consumer.seek_to_beginning()
+            error_count = 0
             
-            # Check if this is an error event
-            if data.get('type') == 'error_metric':
-                if error_count == index:
-                    logger.info(f"Found error event at index {index}")
-                    return data['payload'], 200
-                error_count += 1
+            # Iterate through messages
+            for msg in kafka_consumer:
+                data = msg.value
+                
+                # Check if this is an error event
+                if data.get('type') == 'error_metric':
+                    if error_count == index:
+                        logger.info(f"Found error event at index {index}")
+                        return data['payload'], 200
+                    error_count += 1
         
         # If we get here, index not found
         logger.error(f"No error event found at index {index}")
@@ -119,22 +127,24 @@ def get_stats():
         return {"message": "Service unavailable"}, 503
     
     try:
-        # Seek to beginning
-        kafka_consumer.seek_to_beginning()
-        
-        # Initialize counts
-        performance_count = 0
-        error_count = 0
-        
-        # Iterate through all messages
-        for msg in kafka_consumer:
-            data = msg.value
+        # Use lock to prevent concurrent access
+        with consumer_lock:
+            # Seek to beginning
+            kafka_consumer.seek_to_beginning()
             
-            # Count by type
-            if data.get('type') == 'performance_metric':
-                performance_count += 1
-            elif data.get('type') == 'error_metric':
-                error_count += 1
+            # Initialize counts
+            performance_count = 0
+            error_count = 0
+            
+            # Iterate through all messages
+            for msg in kafka_consumer:
+                data = msg.value
+                
+                # Count by type
+                if data.get('type') == 'performance_metric':
+                    performance_count += 1
+                elif data.get('type') == 'error_metric':
+                    error_count += 1
         
         stats = {
             "num_performance_events": performance_count,
@@ -171,5 +181,6 @@ app.add_api(
 if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
-        port=CONFIG['app']['port']
+        port=CONFIG['app']['port'],
+        threaded=True
     )
