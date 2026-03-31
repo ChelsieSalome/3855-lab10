@@ -1,7 +1,6 @@
 import connexion
 from connexion import FlaskApp
-from connexion.middleware import MiddlewarePosition
-from starlette.middleware.cors import CORSMiddleware
+from flask_cors import CORS
 import json
 import logging
 import logging.config
@@ -158,18 +157,11 @@ def health():
     return {"status": "healthy"}, 200
 
 
-# Create the Connexion app (v3.0+ syntax)
+
 app = FlaskApp(__name__, specification_dir='')
 
 #lab10
-app.add_middleware(
-    CORSMiddleware,
-    position=MiddlewarePosition.BEFORE_EXCEPTION,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+CORS(app.app)
 
 # Add API with base path
 app.add_api(

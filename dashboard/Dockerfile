@@ -1,7 +1,9 @@
 FROM nginx:latest
 
 # Remove default nginx config
-RUN rm /etc/nginx/conf.d/default.conf
+RUN rm /etc/nginx/conf.d/default.conf && \
+    rm /usr/share/nginx/html/index.html
+
 
 # Create nginx config that serves static files
 RUN echo 'server { \

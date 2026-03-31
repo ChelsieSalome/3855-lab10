@@ -3,8 +3,7 @@ import json
 import logging
 import logging.config
 import yaml
-from connexion.middleware import MiddlewarePosition
-from starlette.middleware.cors import CORSMiddleware
+from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timezone
 import requests
@@ -152,14 +151,7 @@ def init_scheduler():
 app = connexion.FlaskApp(__name__, specification_dir='')
 
 # lab10
-app.add_middleware(
-    CORSMiddleware,
-    position=MiddlewarePosition.BEFORE_EXCEPTION,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+CORS(app.app)
 
 app.add_api("processing_openapi.yaml", strict_validation=True, validate_responses=True)
 
