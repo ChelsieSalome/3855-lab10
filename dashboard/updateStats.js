@@ -1,9 +1,10 @@
-// API Endpoints - Using Docker internal service names
-const PROCESSING_API_URL = "http://processing-service:8100/stats"
-const ANALYZER_API_URLS = {
-    stats: "http://analyzer-service:5005/analyzer/stats",
-    performance: "http://analyzer-service:5005/analyzer/performance?index=0",
-    error: "http://analyzer-service:5005/analyzer/error?index=0"
+const VM_IP = "172.169.248.121"
+
+const PROCESSING_STATS_API_URL = `http://${VM_IP}:8100/stats`
+const ANALYZER_API_URL = {
+    stats: `http://${VM_IP}:5005/analyzer/stats`,
+    performance: `http://${VM_IP}:5005/analyzer/performance?index=0`,
+    error: `http://${VM_IP}:5005/analyzer/error?index=0`
 }
 
 /**
@@ -52,22 +53,22 @@ const getStats = () => {
     document.getElementById("last-updated-value").innerText = getLocaleDateStr();
     
     // Fetch Processing Service Stats
-    makeReq(PROCESSING_API_URL, (result) => {
+    makeReq(PROCESSING_STATS_API_URL, (result) => {
         updateCodeDiv(result, "processing-stats");
     });
     
     // Fetch Analyzer Service Stats
-    makeReq(ANALYZER_API_URLS.stats, (result) => {
+    makeReq(ANALYZER_API_URL.stats, (result) => {
         updateCodeDiv(result, "analyzer-stats");
     });
     
     // Fetch a Performance Event
-    makeReq(ANALYZER_API_URLS.performance, (result) => {
+    makeReq(ANALYZER_API_URL.performance, (result) => {
         updateCodeDiv(result, "event-performance");
     });
     
     // Fetch an Error Event
-    makeReq(ANALYZER_API_URLS.error, (result) => {
+    makeReq(ANALYZER_API_URL.error, (result) => {
         updateCodeDiv(result, "event-error");
     });
 };
