@@ -32,10 +32,8 @@ def create_consumer():
             consumer_timeout_ms=1000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
         )
-        # Initialize the consumer
-        consumer.poll(timeout_ms=1000)
-        consumer.seek_to_beginning()
-        logger.info("Kafka consumer created and initialized successfully")
+        # Don't poll or seek during initialization - let first request handle it
+        logger.info("Kafka consumer created successfully")
         return consumer
     except Exception as e:
         logger.error(f"Failed to create Kafka consumer: {str(e)}")
@@ -47,10 +45,15 @@ kafka_consumer = create_consumer()
 # Create a lock to prevent concurrent access to the consumer
 consumer_lock = threading.Lock()
 
+# Flag to track if consumer has been initialized
+consumer_initialized = False
+
 
 def get_performance_event(index):
     """Gets a performance event at a specific index"""
     logger.info(f"Request for performance event at index {index}")
+    
+    global kafka_consumer, consumer_initialized
     
     if kafka_consumer is None:
         logger.error("Kafka consumer not available")
@@ -59,6 +62,13 @@ def get_performance_event(index):
     try:
         # Use lock to prevent concurrent access
         with consumer_lock:
+            # Initialize on first request only
+            if not consumer_initialized:
+                logger.info("Initializing consumer on first request")
+                kafka_consumer.poll(timeout_ms=1000)
+                kafka_consumer.seek_to_beginning()
+                consumer_initialized = True
+            
             # Seek to beginning and iterate
             kafka_consumer.seek_to_beginning()
             performance_count = 0
@@ -87,6 +97,8 @@ def get_error_event(index):
     """Gets an error event at a specific index"""
     logger.info(f"Request for error event at index {index}")
     
+    global kafka_consumer, consumer_initialized
+    
     if kafka_consumer is None:
         logger.error("Kafka consumer not available")
         return {"message": "Service unavailable"}, 503
@@ -94,6 +106,13 @@ def get_error_event(index):
     try:
         # Use lock to prevent concurrent access
         with consumer_lock:
+            # Initialize on first request only
+            if not consumer_initialized:
+                logger.info("Initializing consumer on first request")
+                kafka_consumer.poll(timeout_ms=1000)
+                kafka_consumer.seek_to_beginning()
+                consumer_initialized = True
+            
             # Seek to beginning and iterate
             kafka_consumer.seek_to_beginning()
             error_count = 0
@@ -122,6 +141,8 @@ def get_stats():
     """Gets statistics about events in the Kafka queue"""
     logger.info("Request for event statistics")
     
+    global kafka_consumer, consumer_initialized
+    
     if kafka_consumer is None:
         logger.error("Kafka consumer not available")
         return {"message": "Service unavailable"}, 503
@@ -129,6 +150,13 @@ def get_stats():
     try:
         # Use lock to prevent concurrent access
         with consumer_lock:
+            # Initialize on first request only
+            if not consumer_initialized:
+                logger.info("Initializing consumer on first request")
+                kafka_consumer.poll(timeout_ms=1000)
+                kafka_consumer.seek_to_beginning()
+                consumer_initialized = True
+            
             # Seek to beginning
             kafka_consumer.seek_to_beginning()
             
@@ -181,6 +209,5 @@ app.add_api(
 if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
-        port=CONFIG['app']['port'],
-        threaded=True
+        port=CONFIG['app']['port']
     )
