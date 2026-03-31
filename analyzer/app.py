@@ -8,23 +8,20 @@ import yaml
 from kafka import KafkaConsumer
 
 # Load configuration
-with open('/config/analyzer_config.yml', 'r') as f: #lab9
+with open('/config/analyzer_config.yml', 'r') as f:
     CONFIG = yaml.safe_load(f)
 
 # Load logging configuration
-with open('/config/analyzer_log_config.yml', 'r') as f: #lab9
+with open('/config/analyzer_log_config.yml', 'r') as f:
     log_config = yaml.safe_load(f.read())
     logging.config.dictConfig(log_config)
 
 logger = logging.getLogger('basicLogger')
 
-
-def get_performance_event(index):
-    """Gets a performance event at a specific index"""
-    logger.info(f"Request for performance event at index {index}")
-    
+# Create ONE persistent Kafka consumer at startup - FIX FOR LAB 10
+def create_consumer():
+    """Create a persistent Kafka consumer"""
     try:
-        # Create Kafka consumer
         consumer = KafkaConsumer(
             CONFIG['kafka']['topic'],
             bootstrap_servers=f"{CONFIG['kafka']['hostname']}:{CONFIG['kafka']['port']}",
@@ -34,24 +31,42 @@ def get_performance_event(index):
             consumer_timeout_ms=1000,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
         )
+        # Initialize the consumer
         consumer.poll(timeout_ms=1000)
         consumer.seek_to_beginning()
-        # Track counts for performance events
+        logger.info("Kafka consumer created and initialized successfully")
+        return consumer
+    except Exception as e:
+        logger.error(f"Failed to create Kafka consumer: {str(e)}")
+        return None
+
+# Create the persistent consumer at module load time
+kafka_consumer = create_consumer()
+
+
+def get_performance_event(index):
+    """Gets a performance event at a specific index"""
+    logger.info(f"Request for performance event at index {index}")
+    
+    if kafka_consumer is None:
+        logger.error("Kafka consumer not available")
+        return {"message": "Service unavailable"}, 503
+    
+    try:
+        # Seek to beginning and iterate
+        kafka_consumer.seek_to_beginning()
         performance_count = 0
         
         # Iterate through messages
-        for msg in consumer:
+        for msg in kafka_consumer:
             data = msg.value
             
             # Check if this is a performance event
             if data.get('type') == 'performance_metric':
                 if performance_count == index:
                     logger.info(f"Found performance event at index {index}")
-                    consumer.close()
                     return data['payload'], 200
                 performance_count += 1
-        
-        consumer.close()
         
         # If we get here, index not found
         logger.error(f"No performance event found at index {index}")
@@ -66,35 +81,25 @@ def get_error_event(index):
     """Gets an error event at a specific index"""
     logger.info(f"Request for error event at index {index}")
     
+    if kafka_consumer is None:
+        logger.error("Kafka consumer not available")
+        return {"message": "Service unavailable"}, 503
+    
     try:
-        # Create Kafka consumer
-        consumer = KafkaConsumer(
-            CONFIG['kafka']['topic'],
-            bootstrap_servers=f"{CONFIG['kafka']['hostname']}:{CONFIG['kafka']['port']}",
-            group_id='analyzer_group',
-            auto_offset_reset='earliest',
-            enable_auto_commit=False,
-            consumer_timeout_ms=1000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-        )
-        consumer.poll(timeout_ms=1000)
-        consumer.seek_to_beginning() 
-        # Track counts for error events
+        # Seek to beginning and iterate
+        kafka_consumer.seek_to_beginning()
         error_count = 0
         
         # Iterate through messages
-        for msg in consumer:
+        for msg in kafka_consumer:
             data = msg.value
             
             # Check if this is an error event
             if data.get('type') == 'error_metric':
                 if error_count == index:
                     logger.info(f"Found error event at index {index}")
-                    consumer.close()
                     return data['payload'], 200
                 error_count += 1
-        
-        consumer.close()
         
         # If we get here, index not found
         logger.error(f"No error event found at index {index}")
@@ -109,26 +114,20 @@ def get_stats():
     """Gets statistics about events in the Kafka queue"""
     logger.info("Request for event statistics")
     
+    if kafka_consumer is None:
+        logger.error("Kafka consumer not available")
+        return {"message": "Service unavailable"}, 503
+    
     try:
-        # Create Kafka consumer
-        consumer = KafkaConsumer(
-            CONFIG['kafka']['topic'],
-            bootstrap_servers=f"{CONFIG['kafka']['hostname']}:{CONFIG['kafka']['port']}",
-            group_id='analyzer_group',
-            auto_offset_reset='earliest',
-            enable_auto_commit=False,
-            consumer_timeout_ms=1000,
-            value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-        )
-
-        consumer.poll(timeout_ms=1000)
-        consumer.seek_to_beginning()
+        # Seek to beginning
+        kafka_consumer.seek_to_beginning()
+        
         # Initialize counts
         performance_count = 0
         error_count = 0
         
         # Iterate through all messages
-        for msg in consumer:
+        for msg in kafka_consumer:
             data = msg.value
             
             # Count by type
@@ -136,8 +135,6 @@ def get_stats():
                 performance_count += 1
             elif data.get('type') == 'error_metric':
                 error_count += 1
-        
-        consumer.close()
         
         stats = {
             "num_performance_events": performance_count,
@@ -160,7 +157,7 @@ def health():
 
 app = FlaskApp(__name__, specification_dir='')
 
-#lab10
+# Enable CORS
 CORS(app.app)
 
 # Add API with base path
